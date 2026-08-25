@@ -146,6 +146,70 @@ function drawPixel(imagedata,x,y,color) {
 } // end drawPixel
     
 
+// draw a color-interpolated rectangle given its corner positions and colors
+function drawRectangle(imagedata,ulx,uly,lrx,lry,ulc,urc,llc,lrc) {
+
+    // set up the vertical interpolation
+    var lc = ulc.clone();  // left color
+    var rc = urc.clone();  // right color
+    var vDelta = 1 / (lry-uly); // norm'd vertical delta
+    var lcDelta = llc.clone().subtract(ulc).scale(vDelta); // left vert color delta
+    var rcDelta = lrc.clone().subtract(urc).scale(vDelta); // right vert color delta
+
+    // set up the horizontal interpolation
+    var hc = new Color(); // horizontal color
+    var hDelta = 1 / (lrx-ulx); // norm'd horizontal delta
+    var hcDelta = new Color(); // horizontal color delta
+
+    // do the interpolation
+    for (var y=uly; y<=lry; y++) {
+        hc.copy(lc); // begin with the left color
+        hcDelta.copy(rc).subtract(lc).scale(hDelta); // reset horiz color delta
+        for (var x=ulx; x<=lrx; x++) {
+            drawPixel(imagedata,x,y,hc);
+            hc.add(hcDelta);
+        } // end horizontal
+        lc.add(lcDelta);
+        rc.add(rcDelta);
+    } // end vertical
+} // end drawRectangle
+
+// draw a color-interpolated triangle, one color per vertex
+// each vertex is {x: <number>, y: <number>, c: <Color>}
+function drawTriangle(imagedata,v0,v1,v2) {
+
+    // twice the signed area of the triangle: the barycentric normalizer
+    var area = (v1.x-v0.x)*(v2.y-v0.y) - (v2.x-v0.x)*(v1.y-v0.y);
+    if (area === 0) // degenerate triangle, nothing to fill
+        return;
+
+    // only visit the pixels inside the triangle's bounding box
+    var minX = Math.max(0,Math.floor(Math.min(v0.x,v1.x,v2.x)));
+    var maxX = Math.min(imagedata.width-1,Math.ceil(Math.max(v0.x,v1.x,v2.x)));
+    var minY = Math.max(0,Math.floor(Math.min(v0.y,v1.y,v2.y)));
+    var maxY = Math.min(imagedata.height-1,Math.ceil(Math.max(v0.y,v1.y,v2.y)));
+
+    var c = new Color(); // the interpolated pixel color
+    for (var y=minY; y<=maxY; y++) {
+        for (var x=minX; x<=maxX; x++) {
+
+            // barycentric weights of this pixel wrt the three vertices
+            var b0 = ((v1.x-x)*(v2.y-y) - (v2.x-x)*(v1.y-y)) / area;
+            var b1 = ((v2.x-x)*(v0.y-y) - (v0.x-x)*(v2.y-y)) / area;
+            var b2 = 1 - b0 - b1;
+
+            // inside the triangle only when no weight is negative
+            if ((b0 >= 0) && (b1 >= 0) && (b2 >= 0)) {
+                c.copy(v0.c).scale(b0);
+                c.add(v1.c.clone().scale(b1));
+                c.add(v2.c.clone().scale(b2));
+                drawPixel(imagedata,x,y,c);
+            } // end if inside
+        } // end horizontal
+    } // end vertical
+} // end drawTriangle
+
+
 /* main -- here is where execution begins after window load */
 
 function main() {
@@ -156,40 +220,21 @@ function main() {
     var w = context.canvas.width; // as set in html
     var h = context.canvas.height;  // as set in html
     var imagedata = context.createImageData(w,h);
- 
-    // Define a rectangle in 2D with colors and coords at corners
-    var ulc = new Color(255,0,0,255); // upper left corner color: red
-    var urc = new Color(0,255,0,255); // upper right corner color: green
-    var llc = new Color(0,0,255,255); // lower left corner color: blue
-    var lrc = new Color(0,0,0,255); // lower right corner color: black
-    var ulx = 50, uly = 50; // upper left corner position
-    var urx = 200, ury = 50; // upper right corner position
-    var llx = 50, lly = 150; // lower left corner position
-    var lrx = 200, lry = 150; // lower right corner position
-    
-    // set up the vertical interpolation
-    var lc = ulc.clone();  // left color
-    var rc = urc.clone();  // right color
-    var vDelta = 1 / (lly-uly); // norm'd vertical delta
-    var lcDelta = llc.clone().subtract(ulc).scale(vDelta); // left vert color delta
-    var rcDelta = lrc.clone().subtract(urc).scale(vDelta); // right vert color delta
-    
-    // set up the horizontal interpolation
-    var hc = new Color(); // horizontal color
-    var hDelta = 1 / (urx-ulx); // norm'd horizontal delta
-    var hcDelta = new Color(); // horizontal color delta
-    
-    // do the interpolation
-    for (var y=uly; y<=lly; y++) {
-        hc.copy(lc); // begin with the left color
-        hcDelta.copy(rc).subtract(lc).scale(hDelta); // reset horiz color delta
-        for (var x=ulx; x<=urx; x++) {
-            drawPixel(imagedata,x,y,hc);
-            hc.add(hcDelta);
-        } // end horizontal
-        lc.add(lcDelta);
-        rc.add(rcDelta);
-    } // end vertical
-    
+
+    // the four requested corner colors
+    var cyan = new Color(0,255,255,255);
+    var magenta = new Color(255,0,255,255);
+    var yellow = new Color(255,255,0,255);
+    var pink = new Color(255,105,180,255);
+
+    // a rectangle with cyan, magenta, yellow and pink corners
+    drawRectangle(imagedata,40,40,250,190,cyan,magenta,yellow,pink);
+
+    // a triangle with cyan, magenta and yellow corners
+    drawTriangle(imagedata,
+        {x:130, y:270, c:cyan},     // apex
+        {x:440, y:300, c:magenta},  // right
+        {x:250, y:480, c:yellow});  // bottom
+
     context.putImageData(imagedata, 0, 0); // display the image in the context
 }
